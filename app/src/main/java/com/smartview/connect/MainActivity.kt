@@ -1,4 +1,3 @@
-
 package com.smartview.connect
 
 import android.app.Activity
