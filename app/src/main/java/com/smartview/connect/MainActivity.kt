@@ -6,11 +6,15 @@ import android.app.AlertDialog
 import android.os.Bundle
 import android.graphics.Color
 import android.view.Gravity
+import android.view.ViewGroup
+import android.view.inputmethod.InputMethodManager
+import android.content.Context
 import android.widget.Button
 import android.widget.EditText
 import android.widget.LinearLayout
 import android.widget.TextView
 import android.widget.Toast
+import android.text.InputType
 import com.google.firebase.auth.FirebaseAuth
 
 class MainActivity : Activity() {
@@ -19,14 +23,10 @@ class MainActivity : Activity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-
         auth = FirebaseAuth.getInstance()
 
-        if (auth.currentUser != null) {
-            showHome()
-        } else {
-            showLogin()
-        }
+        if (auth.currentUser != null) showHome()
+        else showLogin()
     }
 
     private fun createLayout(): LinearLayout {
@@ -35,6 +35,29 @@ class MainActivity : Activity() {
             gravity = Gravity.CENTER
             setPadding(32, 32, 32, 32)
             setBackgroundColor(Color.rgb(15, 23, 42))
+        }
+    }
+
+    private fun makeField(hintText: String, type: Int): EditText {
+        return EditText(this).apply {
+            hint = hintText
+            inputType = type
+            setTextColor(Color.WHITE)
+            setHintTextColor(Color.LTGRAY)
+            textSize = 16f
+            isFocusable = true
+            isFocusableInTouchMode = true
+            isClickable = true
+            isEnabled = true
+            backgroundTintList =
+                android.content.res.ColorStateList.valueOf(Color.WHITE)
+
+            layoutParams = LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                60
+            ).apply {
+                bottomMargin = 16
+            }
         }
     }
 
@@ -48,15 +71,17 @@ class MainActivity : Activity() {
             gravity = Gravity.CENTER
         }
 
-        val email = EditText(this).apply {
-            hint = "Email manzilingiz"
-            inputType = 33
-        }
+        val email = makeField(
+            "Email manzilingiz",
+            InputType.TYPE_CLASS_TEXT or
+                InputType.TYPE_TEXT_VARIATION_EMAIL_ADDRESS
+        )
 
-        val password = EditText(this).apply {
-            hint = "Parol"
-            inputType = 129
-        }
+        val password = makeField(
+            "Parol",
+            InputType.TYPE_CLASS_TEXT or
+                InputType.TYPE_TEXT_VARIATION_PASSWORD
+        )
 
         layout.addView(title)
         layout.addView(email)
@@ -84,9 +109,9 @@ class MainActivity : Activity() {
         }
 
         val task = if (register) {
-            auth.createUserWithEmailAndPassword(email, password)
+            auth.createUserWithEmailAndPassword(email.trim(), password)
         } else {
-            auth.signInWithEmailAndPassword(email, password)
+            auth.signInWithEmailAndPassword(email.trim(), password)
         }
 
         task.addOnCompleteListener { result ->
