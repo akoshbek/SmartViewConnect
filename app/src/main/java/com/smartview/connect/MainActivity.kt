@@ -7,8 +7,6 @@ import android.os.Bundle
 import android.graphics.Color
 import android.view.Gravity
 import android.view.ViewGroup
-import android.view.inputmethod.InputMethodManager
-import android.content.Context
 import android.widget.Button
 import android.widget.EditText
 import android.widget.LinearLayout
@@ -16,14 +14,36 @@ import android.widget.TextView
 import android.widget.Toast
 import android.text.InputType
 import com.google.firebase.auth.FirebaseAuth
+import com.google.firebase.database.FirebaseDatabase
+import com.google.firebase.database.DataSnapshot
+import com.google.firebase.database.DatabaseError
+import com.google.firebase.database.ValueEventListener
+import java.util.UUID
+import java.security.SecureRandom
 
 class MainActivity : Activity() {
 
     private lateinit var auth: FirebaseAuth
+    private lateinit var database: FirebaseDatabase
+
+    private fun deviceId(): String {
+        val prefs = getSharedPreferences("device_data", MODE_PRIVATE)
+        var id = prefs.getString("device_id", null)
+
+        if (id == null) {
+            id = UUID.randomUUID().toString()
+            prefs.edit().putString("device_id", id).apply()
+        }
+        return id
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+
         auth = FirebaseAuth.getInstance()
+        database = FirebaseDatabase.getInstance(
+            "https://smartviewconnect-6860d-default-rtdb.firebaseio.com/"
+        )
 
         if (auth.currentUser != null) showHome()
         else showLogin()
@@ -45,16 +65,11 @@ class MainActivity : Activity() {
             setTextColor(Color.WHITE)
             setHintTextColor(Color.LTGRAY)
             textSize = 16f
-            isFocusable = true
-            isFocusableInTouchMode = true
-            isClickable = true
-            isEnabled = true
             backgroundTintList =
                 android.content.res.ColorStateList.valueOf(Color.WHITE)
 
             layoutParams = LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT,
-                60
+                ViewGroup.LayoutParams.MATCH_PARENT, 60
             ).apply {
                 bottomMargin = 16
             }
@@ -98,11 +113,15 @@ class MainActivity : Activity() {
         setContentView(layout)
     }
 
-    private fun authenticate(email: String, password: String, register: Boolean) {
+    private fun authenticate(
+        email: String,
+        password: String,
+        register: Boolean
+    ) {
         if (email.isBlank() || password.length < 6) {
             Toast.makeText(
                 this,
-                "Email kiriting va kamida 6 belgili parol yozing",
+                "Email va kamida 6 belgili parol kiriting",
                 Toast.LENGTH_LONG
             ).show()
             return
@@ -118,11 +137,9 @@ class MainActivity : Activity() {
             if (result.isSuccessful) {
                 showHome()
             } else {
-                Toast.makeText(
-                    this,
-                    result.exception?.localizedMessage ?: "Xatolik yuz berdi",
-                    Toast.LENGTH_LONG
-                ).show()
+                showInfo(
+                    result.exception?.localizedMessage ?: "Kirishda xatolik"
+                )
             }
         }
     }
@@ -139,16 +156,24 @@ class MainActivity : Activity() {
 
         layout.addView(title)
 
+        addButton(layout, "Ulanish kodi yaratish") {
+            createPairingCode()
+        }
+
+        addButton(layout, "Kod bilan ulanish") {
+            enterPairingCode()
+        }
+
         addButton(layout, "Kamera ulashish") {
-            showInfo("Kamera egasining roziligi va Android ruxsati kerak.")
+            showInfo("Avval telefonlarni bog‘lash kerak. Kamera egasining roziligi talab qilinadi.")
         }
 
         addButton(layout, "Ekran ulashish") {
-            showInfo("Ekran uzatish Android tasdig‘i bilan boshlanadi.")
+            showInfo("Ekran uzatish Android tasdig‘i bilan ishlaydi. Bu funksiya hali qo‘shilmagan.")
         }
 
         addButton(layout, "Tasvirni ko‘rish") {
-            showInfo("Keyingi bosqichda PIN-kodli tasdiqlangan ulanish qo‘shiladi.")
+            showInfo("Avval telefonlarni PIN-kod orqali bog‘lang.")
         }
 
         addButton(layout, "Hisobdan chiqish") {
@@ -157,6 +182,121 @@ class MainActivity : Activity() {
         }
 
         setContentView(layout)
+    }
+
+    private fun createPairingCode() {
+        val uid = auth.currentUser?.uid ?: return
+        val code = String.format(
+            "%06d",
+            SecureRandom().nextInt(1_000_000)
+        )
+
+        val pairingRef = database.reference
+            .child("users")
+            .child(uid)
+            .child("pairings")
+            .child(code)
+
+        val data = mapOf(
+            "hostDeviceId" to deviceId(),
+            "guestDeviceId" to "",
+            "status" to "pending"
+        )
+
+        pairingRef.setValue(data)
+            .addOnSuccessListener {
+                AlertDialog.Builder(this)
+                    .setTitle("Ulanish kodi")
+                    .setMessage(
+                        "Ikkinchi telefonda ushbu kodni kiriting:\n\n$code\n\n" +
+                        "Ikkinchi telefon ulanish so‘rovi yuborganda xabar olasiz."
+                    )
+                    .setPositiveButton("Kuzatish", null)
+                    .show()
+
+                pairingRef.addValueEventListener(
+                    object : ValueEventListener {
+                        override fun onDataChange(snapshot: DataSnapshot) {
+                            val status = snapshot.child("status")
+                                .getValue(String::class.java)
+
+                            if (status == "connected") {
+                                Toast.makeText(
+                                    this@MainActivity,
+                                    "Ikkinchi telefon ulanish so‘rovi yubordi.",
+                                    Toast.LENGTH_LONG
+                                ).show()
+                            }
+                        }
+
+                        override fun onCancelled(error: DatabaseError) {
+                            showInfo("Firebase xatosi: ${error.message}")
+                        }
+                    }
+                )
+            }
+            .addOnFailureListener {
+                showInfo("Kod yaratilmadi: ${it.message}")
+            }
+    }
+
+    private fun enterPairingCode() {
+        val uid = auth.currentUser?.uid ?: return
+        val input = makeField(
+            "6 xonali kod",
+            InputType.TYPE_CLASS_NUMBER
+        )
+
+        AlertDialog.Builder(this)
+            .setTitle("Ikkinchi telefonni ulash")
+            .setView(input)
+            .setNegativeButton("Bekor qilish", null)
+            .setPositiveButton("Ulanish") { _, _ ->
+                val code = input.text.toString().trim()
+
+                if (!code.matches(Regex("[0-9]{6}"))) {
+                    showInfo("6 xonali kod kiriting.")
+                    return@setPositiveButton
+                }
+
+                val ref = database.reference
+                    .child("users")
+                    .child(uid)
+                    .child("pairings")
+                    .child(code)
+
+                ref.get()
+                    .addOnSuccessListener { snapshot ->
+                        val status = snapshot.child("status")
+                            .getValue(String::class.java)
+
+                        val hostId = snapshot.child("hostDeviceId")
+                            .getValue(String::class.java)
+
+                        if (!snapshot.exists() ||
+                            status != "pending" ||
+                            hostId == deviceId()
+                        ) {
+                            showInfo("Kod noto‘g‘ri, eskirgan yoki bu telefonning o‘z kodi.")
+                            return@addOnSuccessListener
+                        }
+
+                        ref.updateChildren(
+                            mapOf(
+                                "guestDeviceId" to deviceId(),
+                                "status" to "connected"
+                            )
+                        ).addOnSuccessListener {
+                            showInfo("Ulanish so‘rovi yuborildi. Birinchi telefon tasdig‘ini kuting.")
+                        }.addOnFailureListener {
+                            showInfo("So‘rov yuborilmadi: ${it.message}")
+                        }
+                    }
+                    .addOnFailureListener {
+                        showInfo("Firebase xatosi: ${it.message}")
+                    }
+            }
+            .show()
     }
 
     private fun addButton(
