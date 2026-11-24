@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "1059243237599",
+    "project_id": "smartviewconnect-6860d",
+    "storage_bucket": "smartviewconnect-6860d.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:1059243237599:android:eeb153f229011877c7496a",
+        "android_client_info": {
+          "package_name": "com.smartview.connect"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyD8pB8OqrbRU9WaTHGxhMMuKkR8SajNgaU"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
